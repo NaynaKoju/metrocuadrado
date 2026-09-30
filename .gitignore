@@ -9,3 +9,4 @@ test.py
 
 *.venv
 .env
+details_all.py
