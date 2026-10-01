@@ -65,6 +65,8 @@ translator = deepl.DeepLClient(DEEPL_API_KEY)
 
 translation_cache = {} #stores values in a dictionary to avoid repeated translations (spanish:english)
 
+#hardcoded mapping for featured keys to English labels as translation may not always be accurate or available for certain keys
+
 # Function to translate a single value from Spanish to English
 
 def translate_value(value):
@@ -133,47 +135,49 @@ def translate_value(value):
 
         return value
 
+# Function to translate a single key from Spanish to English
+def translate_key(key):
 
-# Function to translate featured values
+    if key is None:
+        return None
+
+    key = str(key).strip()
+
+    if not key:
+        return key
+
+    # Translate key using DeepL
+    return translate_value(key)
+
 
 def translate_featured(featured):
-
     translated_featured = []
 
     for item in featured:
-
         if not item:
-
             continue
 
         item = str(item).strip()
 
         if ":" in item:
-
             key, value = item.split(":", 1)
 
             key = key.strip()
-
             value = value.strip()
 
-            # Translate only the value as the key is already in English
+            # Translate the key using the manual mapping
+            translated_key = translate_key(key)
 
+            # Translate the value using DeepL
             translated_value = translate_value(value)
 
             translated_featured.append(
-
-                f"{key}:{translated_value}"
-
+                f"{translated_key}:{translated_value}"
             )
 
         else:
-
-            # Translate the whole item if there is no key
-
             translated_featured.append(
-
                 translate_value(item)
-
             )
 
     return translated_featured
@@ -838,116 +842,6 @@ def main():
 
             )
 
-        # # COUNT MISSING FIELDS
-
-        # # We count how many of these fields have no value.
-
-        # hg_columns = [
-
-        #     "id",
-
-        #     "uuid",
-
-        #     "title",
-
-        #     "link",
-
-        #     "location",
-
-        #     "country",
-
-        #     "lat",
-
-        #     "lng",
-
-        #     "latLng_status",
-
-        #     "type",
-
-        #     "phone",
-
-        #     "price",
-
-        #     "price_unit",
-
-        #     "details",
-
-        #     "img_src",
-
-        #     "about",
-
-        #     "exterior_acres",
-
-        #     "web_id",
-
-        #     "mls_id",
-
-        #     "bedrooms",
-
-        #     "full_baths",
-
-        #     "property_type",
-
-        #     "interior_sq_ft",
-
-        #     "amneties",
-
-        #     "features",
-
-        #     "partial_baths",
-
-        #     "change_price",
-
-        #     "sold_date",
-
-        #     "deleted_at",
-
-        #     "created_at",
-
-        #     "updated_at",
-
-        #     "city",
-
-        #     "new_features",
-
-        #     "property_details",
-
-        #     "exterior_details",
-
-        #     "interior_details",
-
-        #     "city_checked",
-
-        #     "province",
-
-        #     "property_status",
-
-        #     "neighbourhood",
-
-        #     "commercial_units",
-
-        #     "source_hash",
-
-        #     "first_seen_at",
-
-        #     "last_seen_at",
-
-        #     "missing_count",
-
-        #     "admin_price"
-
-        # ]
-
-        # row["missing_count"] = sum(
-
-        #     row[column] is None
-
-        #     for column in hg_columns
-
-        #     if column != "missing_count"
-
-        # )
-
         # ADD ROW TO LIST
 
         rows.append(row)
@@ -963,27 +857,6 @@ def main():
     # CREATE DATAFRAME
 
     df = pd.DataFrame(rows)
-
-    # print("\nHG COLUMNS:")
-
-    # print(df[hg_columns].T)
-
-    # print("\nDataFrame:")
-
-    # print(df)
-
-    # print("\nData types:")
-
-    # print(df.dtypes)
-
-    # print("\nNumber of properties:")
-
-    # print(len(df))
-
-    # print("\nMissing count:")
-
-    # print(df["missing_count"])
-
 
     # TRANSLATE SPANISH COLUMNS TO ENGLISH
 
