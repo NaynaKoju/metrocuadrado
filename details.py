@@ -1,22 +1,13 @@
 import requests
-
 import pandas as pd
-
 import os
-
 import logging
-
 import json
-
 import uuid
-
 import re
-
 import deepl
 
 from dotenv import load_dotenv
-
-# LOAD API KEY from .env
 
 load_dotenv()
 
@@ -28,8 +19,6 @@ API_URL = "https://www.metrocuadrado.com/rest-search/search"
 
 # LOGGER
 
-# Creates a log file for this scraper
-
 logging.basicConfig(
 
     filename="../scraper_logs/property_details.log",
@@ -39,7 +28,6 @@ logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s"
 
 )
-
 
 # API PARAMETERS
 
@@ -69,18 +57,134 @@ headers = {
 
 }
 
+# translates text from Spanish to English
+
+translator = deepl.DeepLClient(DEEPL_API_KEY)
+
+# Translation cache
+
+translation_cache = {} #stores values in a dictionary to avoid repeated translations (spanish:english)
+
+# Function to translate a single value from Spanish to English
+
+def translate_value(value):
+
+    if value is None:
+
+        return None
+
+    if not isinstance(value, str):
+
+        return value
+
+    value = value.strip()
+
+    if not value:
+
+        return value
+
+    # Check if this value was already translated
+
+    if value in translation_cache:
+
+        return translation_cache[value]
+
+    try:
+
+        # Translate value using DeepL
+
+        result = translator.translate_text(
+
+            value,
+
+            source_lang="ES",
+
+            target_lang="EN-US"
+
+        )
+
+        translated = result.text
+
+        # Save translation in cache
+
+        translation_cache[value] = translated
+
+        return translated
+
+    except Exception as e:
+
+        print(
+
+            f"Translation failed for '{value}': {e}"
+
+        )
+
+        logging.error(
+
+            "Translation failed for '%s': %s",
+
+            value,
+
+            e
+
+        )
+
+        # Return original value if translation fails
+
+        return value
+
+
+# Function to translate featured values
+
+def translate_featured(featured):
+
+    translated_featured = []
+
+    for item in featured:
+
+        if not item:
+
+            continue
+
+        item = str(item).strip()
+
+        if ":" in item:
+
+            key, value = item.split(":", 1)
+
+            key = key.strip()
+
+            value = value.strip()
+
+            # Translate only the value as the key is already in English
+
+            translated_value = translate_value(value)
+
+            translated_featured.append(
+
+                f"{key}:{translated_value}"
+
+            )
+
+        else:
+
+            # Translate the whole item if there is no key
+
+            translated_featured.append(
+
+                translate_value(item)
+
+            )
+
+    return translated_featured
 
 # Function to create property details
 
 def create_property_details(property_data):
 
-    # Get the "featured" list from the property data.
-
-    # If "featured" does not exist or is None, use an empty list instead.
-
     featured = property_data.get("featured") or []
 
-    # Create an empty dictionary where we will store the featured information as key-value pairs.
+    # Creates an empty dictionary where we will store the featured information as key-value pairs.
 
     featured_dict = {}
 
@@ -88,33 +192,19 @@ def create_property_details(property_data):
 
     for item in featured:
 
-        # Remove extra spaces from the beginning and end of the text.
-
         item = item.strip()
-
-        # Check whether the item contains a ":"
 
         if ":" in item:
 
-            # Split the text only at the first ":"
-
             key, value = item.split(":", 1)
-
-            # Remove extra spaces and store the result in the dictionary.
 
             featured_dict[key.strip()] = value.strip()
 
-    # Create an empty list to store each prop.detail as dict
+    # empty list to store each prop.detail as dict
 
     details = []
 
     # PROPERTY TYPE
-
-    # Get the property type from the nested "mtipoinmueble" dictionary.
-
-    # {"mtipoinmueble": {"nombre": "Apartamento"}}
-
-    # will give us "Apartamento".
 
     property_type = (
 
@@ -128,7 +218,7 @@ def create_property_details(property_data):
 
             "label": "Property Type",
 
-            "value": property_type
+            "value": translate_value(property_type)
 
         })
 
@@ -144,7 +234,7 @@ def create_property_details(property_data):
 
             "label": "Condition",
 
-            "value": condition
+            "value": translate_value(condition)
 
         })
 
@@ -240,9 +330,7 @@ def create_property_details(property_data):
 
     # FLOOR NUMBER
 
-    # Gets the floor number from the dictionary we created from the "featured" list.
-
-    # Example: featured_dict = {"nroPiso": "5"} -> floor_number will become "5".
+    # Gets the floor number from the dictionary we created from the "featured" list. featured_dict = {"nroPiso": "5"} -> floor_number will become "5".
 
     floor_number = featured_dict.get("nroPiso")
 
@@ -257,8 +345,6 @@ def create_property_details(property_data):
         })
 
     # NUMBER OF FLOORS
-
-    # Get the total number of floors of the property from featured_dict
 
     number_of_floors = featured_dict.get("nroPisos")
 
@@ -296,7 +382,7 @@ def create_property_details(property_data):
 
             "label": "Construction Age",
 
-            "value": construction_age
+            "value": translate_value(construction_age)
 
         })
 
@@ -310,13 +396,11 @@ def create_property_details(property_data):
 
             "label": "Balcony/Terrace",
 
-            "value": balcony
+            "value": translate_value(balcony)
 
         })
 
     # Converts the Python list of dictionaries into a JSON string.
-
-    # ensure_ascii=False sabai characters allow garcha
 
     return json.dumps(details, ensure_ascii=False)
 
@@ -347,7 +431,7 @@ def get_property_images(property_url):
 
         return None
 
-    # Extract the array
+    # Extracts the array
 
     images_json = match.group(1)
 
@@ -374,16 +458,9 @@ def get_property_images(property_url):
     return image_urls
 
 
-# Function to translate text from Spanish to English
-
-translator = deepl.DeepLClient(DEEPL_API_KEY)
-
-
 # MAIN FUNCTION
 
 def main():
-
-    # SEND REQUEST TO METROCUADRADO API
 
     logging.info("Sending request to Metrocuadrado API")
 
@@ -433,11 +510,6 @@ def main():
 
     rows = []
 
-
-    # PROCESS FIRST 10 PROPERTIES
-
-    # for property_data in properties[:10]:
-
     for id, property_data in enumerate(properties[:10], start=1):
 
         print(
@@ -447,7 +519,6 @@ def main():
             property_data.get("midinmueble")
 
         )
-
 
         # PROPERTY URL
 
@@ -587,7 +658,11 @@ def main():
 
             "interior_sq_ft": property_data.get("marea"),
 
-            "amneties": property_data.get("featured"),
+            "amneties": translate_featured(
+
+                property_data.get("featured") or []
+
+            ),
 
             "features": None,
 
@@ -623,7 +698,11 @@ def main():
 
             "exterior_details": None, #Zonas comunes y Exteriores(common areas and outdoor spaces )
 
-            "interior_details": property_data.get("featured"),
+            "interior_details": translate_featured(
+
+                property_data.get("featured") or []
+
+            ),
 
             "city_checked": None,
 
@@ -904,6 +983,7 @@ def main():
     # print("\nMissing count:")
 
     # print(df["missing_count"])
+
 
     # TRANSLATE SPANISH COLUMNS TO ENGLISH
 
