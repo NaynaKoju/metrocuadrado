@@ -300,7 +300,7 @@ def create_property_details(property_data):
 
             "label": "Private Area",
 
-            "value": f"{private_area} m2"
+            "value": f"{private_area * 10.7639:.2f} sq ft"
 
         })
 
@@ -313,8 +313,7 @@ def create_property_details(property_data):
         details.append({
 
             "label": "Area",
-
-            "value": f"{area} m2"
+            "value": f"{area * 10.7639:.2f} sq ft"
 
         })
 
@@ -660,7 +659,11 @@ def main():
 
             ),
 
-            "interior_sq_ft": property_data.get("marea"),
+            "interior_sq_ft": (
+                property_data.get("marea") * 10.7639
+                if property_data.get("marea") is not None
+                else None
+            ),
 
             "amneties": translate_featured(
 
