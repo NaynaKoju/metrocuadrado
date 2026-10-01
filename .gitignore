@@ -11,3 +11,5 @@ test.py
 .env
 details_all.py
 image_test.py
+details_translationgadbad.py
+translation_test.py
