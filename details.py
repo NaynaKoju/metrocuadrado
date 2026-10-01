@@ -15,7 +15,6 @@ API_KEY = os.getenv("API_KEY")
 
 API_URL = "https://www.metrocuadrado.com/rest-search/search"
 
-
 # LOGGER
 
 # Creates a log file for this scraper
@@ -298,7 +297,8 @@ def main():
 
     # PROCESS FIRST 10 PROPERTIES
 
-    for property_data in properties[:10]:
+    # for property_data in properties[:10]:
+    for id, property_data in enumerate(properties[:10], start=1):
 
         print(
             "\nProcessing property:",
@@ -337,7 +337,7 @@ def main():
 
         row = {
 
-            "id": None,
+            "id": id,
 
             "uuid": str(uuid.uuid4()),   #generates universally unique id(idk needed or not)
 
@@ -378,7 +378,13 @@ def main():
 
             "phone": property_data.get("contactPhone"),
 
-            "price": property_data.get("mvalorventa"),
+            #1cop=0.00029869 usd 
+            # 1 COP = 0.00029869 USD
+            "price": (
+                property_data.get("mvalorventa") * 0.00029869
+                if property_data.get("mvalorventa") is not None
+                else None
+            ),
 
             "price_unit": None,
 
