@@ -461,6 +461,30 @@ def get_property_images(property_url):
     return image_urls
 
 
+def get_admin_price(property_url):
+    # Request the property page
+    response = requests.get(property_url)
+    response.raise_for_status()
+    html = response.text
+
+    # Find the administration price
+    match = re.search(
+        r'Administración:\s*\$\s*([\d\.]+)\s*COP',  #s*-> whitespace/tabs
+        html
+    )
+
+    if not match:
+        return None
+
+    # Extract the price
+    admin_price = match.group(1)
+
+    # Remove dots from the Colombian number format
+    admin_price = admin_price.replace(".", "")
+
+    # Convert to integer
+    return int(admin_price)
+
 # MAIN FUNCTION
 
 def main():
@@ -551,6 +575,12 @@ def main():
         else:
 
             images = None
+
+        # GET ADMIN PRICE
+        if property_url:
+            admin_price = get_admin_price(property_url)
+        else:
+            admin_price = None
 
 
         # CREATE ROW
@@ -736,8 +766,8 @@ def main():
             "last_seen_at": None,
 
             "missing_count": None,
-
-            "admin_price": None,
+# https://www.metrocuadrado.com/inmueble/venta-apartamento-medellin-san-julian-2-habitaciones-2-banos-2-garajes/22583-M6862009?src_url=%2Fapartamento%2Fventa%2Fmedellin%2F%3Fsearch%3Dform
+            "admin_price": admin_price,
 
         }
 
