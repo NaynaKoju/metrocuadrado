@@ -13,8 +13,6 @@ load_dotenv()
 
 API_KEY = os.getenv("API_KEY")
 
-# DEEPL_API_KEY = os.getenv("DEEPL_API_KEY")
-
 API_URL = "https://www.metrocuadrado.com/rest-search/search"
 
 
@@ -56,64 +54,6 @@ model = AutoModelForSeq2SeqLM.from_pretrained(MODEL_NAME)
 # Translation cache
 
 translation_cache = {}
-
-
-# translator = deepl.DeepLClient(DEEPL_API_KEY)
-
-# # Translation cache
-# translation_cache = {} #stores values in a dictionary to avoid repeated translations (spanish:english)
-
-
-# Function to translate a single value from Spanish to English
-
-# def translate_value(value):
-
-#     if value is None:
-#         return None
-
-#     if not isinstance(value, str):
-#         return value
-
-#     value = value.strip()
-
-#     if not value:
-#         return value
-
-#     # Check if this value was already translated
-#     if value in translation_cache:
-#         return translation_cache[value]
-
-#     try:
-
-#         # Translate value using DeepL
-#         result = translator.translate_text(
-#             value,
-#             source_lang="ES",
-#             target_lang="EN-US"
-#         )
-
-#         translated = result.text
-
-#         # Save translation in cache
-#         translation_cache[value] = translated
-
-#         return translated
-
-#     except Exception as e:
-
-#         print(
-#             f"Translation failed for '{value}': {e}"
-#         )
-
-#         logging.error(
-#             "Translation failed for '%s': %s",
-#             value,
-#             e
-#         )
-
-#         # Return original value if translation fails
-#         return value
-
 
 # Function to translate a single value from Spanish to English
 
@@ -508,8 +448,41 @@ def get_admin_price(property_url):
 
     return int(admin_price)
 
+# Function to get the current USD to COP exchange rate
+def get_cop_usd_rate():
 
+    response = requests.get(
+        "https://api.frankfurter.dev/v2/rates?base=usd",
+        timeout=10
+    )
 
+    response.raise_for_status()
+
+    data = response.json()
+
+    # Find the USD -> COP exchange rate
+    usd_cop_rate = next(
+        item["rate"]
+        for item in data
+        if item["quote"] == "COP"
+    )
+
+    # Get the date of the exchange rate
+    rate_date = next(
+        item["date"]
+        for item in data
+        if item["quote"] == "COP"
+    )
+
+    print(
+        f"USD to COP exchange rate: {usd_cop_rate} "
+        f"(rate date: {rate_date})"
+    )
+
+    # Convert USD -> COP rate into COP -> USD rate
+    cop_usd_rate = 1 / usd_cop_rate
+
+    return cop_usd_rate
 # MAIN FUNCTION
 
 def main():
@@ -544,6 +517,10 @@ def main():
         data.get("totalHits")
     )
 
+    # Get current COP to USD exchange rate
+    cop_usd_rate = get_cop_usd_rate()
+
+    logging.info("Sending request to Metrocuadrado API")
 
     # GET PROPERTIES
 
@@ -559,9 +536,6 @@ def main():
             "\nProcessing property:",
             property_data.get("midinmueble")
         )
-
-        # print("LOCALIZACION:", property_data.get("localizacion"))
-
 
         # PROPERTY URL
 
@@ -649,12 +623,8 @@ def main():
 
             "phone": property_data.get("contactPhone"),
 
-            #1cop=0.00029869 usd
-
-            # 1 COP = 0.00029869 USD
-
             "price": (
-                property_data.get("mvalorventa") * 0.00029869
+                round(property_data.get("mvalorventa") * cop_usd_rate, 3)
                 if property_data.get("mvalorventa") is not None
                 else None
             ),
@@ -689,11 +659,11 @@ def main():
                 else None
             ),
 
-            "amneties": translate_featured(
+            "amenities": None,
+
+            "features": translate_featured(
                 property_data.get("featured") or []
             ),
-
-            "features": None,
 
             "partial_baths": None,
 
@@ -721,9 +691,11 @@ def main():
 
             "exterior_details": None, #Zonas comunes y Exteriores(common areas and outdoor spaces )
 
-            "interior_details": translate_featured(
-                property_data.get("featured") or []
-            ),
+            # "interior_details": translate_featured(
+            #     property_data.get("featured") or []
+            # ),
+
+            "interior_details": None,
 
             "city_checked": None,
 
@@ -789,7 +761,7 @@ def main():
 
         for column in [
             "img_src",
-            "amneties",
+            "amenities",
             "exterior_details",
             "interior_details"
         ]:
@@ -836,81 +808,6 @@ def main():
     # CREATE DATAFRAME
 
     df = pd.DataFrame(rows)
-
-
-    # TRANSLATE SPANISH COLUMNS TO ENGLISH
-
-    # translate_columns = [
-    #     "title",
-    #     "type",
-    #     "details",
-    #     "property_type",
-    #     "property_status",
-    # ]
-
-    # for column in translate_columns:
-
-    #     # Get unique non-empty values
-
-    #     values = (
-    #         df[column]
-    #         .dropna()
-    #         .astype(str)
-    #         .unique()
-    #         .tolist()
-    #     )
-
-    #     if not values:
-    #         continue
-
-    #     try:
-
-    #         # # Translate values using DeepL
-
-    #         # translated_values = translator.translate_text(
-    #         #     values,
-    #         #     source_lang="ES",
-    #         #     target_lang="EN-US"
-    #         # )
-
-    #         # Get translated text from DeepL results
-
-    #         translated_texts = [
-    #             result.text
-    #             for result in translated_values
-    #         ]
-
-    #         # Create Spanish -> English mapping
-
-    #         translation_map = dict(
-    #             zip(values, translated_texts)
-    #         )
-
-    #         # Replace original values with translations
-
-    #         df[column] = df[column].map(
-    #             lambda x: translation_map.get(
-    #                 str(x),
-    #                 x
-    #             )
-    #             if pd.notna(x)
-    #             else x
-    #         )
-
-    #         print(f"Translated column: {column}")
-
-    #     except Exception as e:
-
-    #         print(
-    #             f"Translation failed for column {column}: {e}"
-    #         )
-
-    #         logging.error(
-    #             "Translation failed for column %s: %s",
-    #             column,
-    #             e
-    #         )
-
 
     # TRANSLATE SPANISH COLUMNS TO ENGLISH
 
@@ -977,7 +874,7 @@ def main():
     # SAVE DATAFRAME TO CSV
 
     df.to_csv(
-        "metrocuadrado_properties_heln.csv",
+        "./csv_files/metrocuadrado_properties.csv",
         index=False
     )
 

@@ -15,7 +15,7 @@ API_KEY = os.getenv("API_KEY")
 
 
 # Output file
-OUTPUT_FILE = "product_urls.csv"
+OUTPUT_FILE = "./csv_files/product_urls.csv"
 
 
 # API URL
