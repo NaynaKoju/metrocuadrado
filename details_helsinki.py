@@ -5,110 +5,156 @@ import logging
 import json
 import uuid
 import re
-import deepl
 
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 from dotenv import load_dotenv
 
 load_dotenv()
 
 API_KEY = os.getenv("API_KEY")
 
-DEEPL_API_KEY = os.getenv("DEEPL_API_KEY")
+# DEEPL_API_KEY = os.getenv("DEEPL_API_KEY")
 
 API_URL = "https://www.metrocuadrado.com/rest-search/search"
+
 
 # LOGGER
 
 logging.basicConfig(
-
     filename="../scraper_logs/property_details.log",
-
     level=logging.INFO,
-
     format="%(asctime)s - %(levelname)s - %(message)s"
-
 )
+
 
 # API PARAMETERS
 
 params = {
-
     "size": 50,
-
     "from": 0,
-
     "realEstateTypeList": (
-
         "casalote,edificio-de-oficinas,"
-
         "edificio-de-apartamentos,apartamento,"
-
         "apartaestudio,casa,oficina,local,"
-
         "bodega,lote,finca,consultorio"
-
     )
-
 }
 
 headers = {
-
     "x-api-key": API_KEY
-
 }
+
 
 # translates text from Spanish to English
 
-translator = deepl.DeepLClient(DEEPL_API_KEY)
+MODEL_NAME = "Helsinki-NLP/opus-mt-es-en"
+
+tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+model = AutoModelForSeq2SeqLM.from_pretrained(MODEL_NAME)
+
 
 # Translation cache
 
-translation_cache = {} #stores values in a dictionary to avoid repeated translations (spanish:english)
+translation_cache = {}
 
-#hardcoded mapping for featured keys to English labels as translation may not always be accurate or available for certain keys
+
+# translator = deepl.DeepLClient(DEEPL_API_KEY)
+
+# # Translation cache
+# translation_cache = {} #stores values in a dictionary to avoid repeated translations (spanish:english)
+
+
+# Function to translate a single value from Spanish to English
+
+# def translate_value(value):
+
+#     if value is None:
+#         return None
+
+#     if not isinstance(value, str):
+#         return value
+
+#     value = value.strip()
+
+#     if not value:
+#         return value
+
+#     # Check if this value was already translated
+#     if value in translation_cache:
+#         return translation_cache[value]
+
+#     try:
+
+#         # Translate value using DeepL
+#         result = translator.translate_text(
+#             value,
+#             source_lang="ES",
+#             target_lang="EN-US"
+#         )
+
+#         translated = result.text
+
+#         # Save translation in cache
+#         translation_cache[value] = translated
+
+#         return translated
+
+#     except Exception as e:
+
+#         print(
+#             f"Translation failed for '{value}': {e}"
+#         )
+
+#         logging.error(
+#             "Translation failed for '%s': %s",
+#             value,
+#             e
+#         )
+
+#         # Return original value if translation fails
+#         return value
+
 
 # Function to translate a single value from Spanish to English
 
 def translate_value(value):
 
     if value is None:
-
         return None
 
     if not isinstance(value, str):
-
         return value
 
     value = value.strip()
 
     if not value:
-
         return value
 
     # Check if this value was already translated
-
     if value in translation_cache:
-
         return translation_cache[value]
 
     try:
 
-        # Translate value using DeepL
-
-        result = translator.translate_text(
-
+        # Translate value using Helsinki-NLP
+        inputs = tokenizer(
             value,
-
-            source_lang="ES",
-
-            target_lang="EN-US"
-
+            return_tensors="pt",
+            padding=True,
+            truncation=True
         )
 
-        translated = result.text
+        outputs = model.generate(
+            **inputs,
+            max_length=512
+        )
+
+        translated = tokenizer.decode(
+            outputs[0],
+            skip_special_tokens=True
+        )
 
         # Save translation in cache
-
         translation_cache[value] = translated
 
         return translated
@@ -116,26 +162,21 @@ def translate_value(value):
     except Exception as e:
 
         print(
-
             f"Translation failed for '{value}': {e}"
-
         )
 
         logging.error(
-
             "Translation failed for '%s': %s",
-
             value,
-
             e
-
         )
 
         # Return original value if translation fails
-
         return value
 
+
 # Function to translate a single key from Spanish to English
+
 def translate_key(key):
 
     if key is None:
@@ -146,29 +187,32 @@ def translate_key(key):
     if not key:
         return key
 
-    # Translate key using DeepL
+    # Translate key using Helsinki-NLP
     return translate_value(key)
 
 
 def translate_featured(featured):
+
     translated_featured = []
 
     for item in featured:
+
         if not item:
             continue
 
         item = str(item).strip()
 
         if ":" in item:
+
             key, value = item.split(":", 1)
 
             key = key.strip()
             value = value.strip()
 
-            # Translate the key using the manual mapping
+            # Translate the key using Helsinki-NLP
             translated_key = translate_key(key)
 
-            # Translate the value using DeepL
+            # Translate the value using Helsinki-NLP
             translated_value = translate_value(value)
 
             translated_featured.append(
@@ -176,11 +220,13 @@ def translate_featured(featured):
             )
 
         else:
+
             translated_featured.append(
                 translate_value(item)
             )
 
     return translated_featured
+
 
 # Function to create property details
 
@@ -208,23 +254,20 @@ def create_property_details(property_data):
 
     details = []
 
+
     # PROPERTY TYPE
 
     property_type = (
-
         property_data.get("mtipoinmueble", {}).get("nombre")
-
     )
 
     if property_type:
 
         details.append({
-
             "label": "Property Type",
-
             "value": translate_value(property_type)
-
         })
+
 
     # CONDITION
 
@@ -235,12 +278,10 @@ def create_property_details(property_data):
     if condition:
 
         details.append({
-
             "label": "Condition",
-
             "value": translate_value(condition)
-
         })
+
 
     # BATHROOMS
 
@@ -249,12 +290,10 @@ def create_property_details(property_data):
     if bathrooms:
 
         details.append({
-
             "label": "Bathrooms",
-
             "value": str(bathrooms)
-
         })
+
 
     # BEDROOMS
 
@@ -263,12 +302,10 @@ def create_property_details(property_data):
     if bedrooms:
 
         details.append({
-
             "label": "Bedrooms",
-
             "value": str(bedrooms)
-
         })
+
 
     # PARKING SPACES
 
@@ -277,32 +314,25 @@ def create_property_details(property_data):
     if parking:
 
         details.append({
-
             "label": "Parking Spaces",
-
             "value": str(parking)
-
         })
+
 
     # PRIVATE AREA
 
     private_area = (
-
         property_data.get("areaPrivada")
-
         or property_data.get("areaprivada")
-
     )
 
     if private_area:
 
         details.append({
-
             "label": "Private Area",
-
             "value": f"{private_area * 10.7639:.2f} sq ft"
-
         })
+
 
     # AREA
 
@@ -311,11 +341,10 @@ def create_property_details(property_data):
     if area:
 
         details.append({
-
             "label": "Area",
             "value": f"{area * 10.7639:.2f} sq ft"
-
         })
+
 
     # SOCIOECONOMIC STRATUM
 
@@ -324,12 +353,10 @@ def create_property_details(property_data):
     if stratum is not None:
 
         details.append({
-
             "label": "Socioeconomic Stratum",
-
             "value": str(stratum)
-
         })
+
 
     # FLOOR NUMBER
 
@@ -340,12 +367,10 @@ def create_property_details(property_data):
     if floor_number:
 
         details.append({
-
             "label": "Floor Number",
-
             "value": floor_number
-
         })
+
 
     # NUMBER OF FLOORS
 
@@ -354,12 +379,10 @@ def create_property_details(property_data):
     if number_of_floors:
 
         details.append({
-
             "label": "Number of Floors",
-
             "value": number_of_floors
-
         })
+
 
     # PRICE
 
@@ -368,12 +391,10 @@ def create_property_details(property_data):
     if price:
 
         details.append({
-
             "label": "Price (COP)",
-
             "value": str(price)
-
         })
+
 
     # CONSTRUCTION AGE
 
@@ -382,12 +403,10 @@ def create_property_details(property_data):
     if construction_age:
 
         details.append({
-
             "label": "Construction Age",
-
             "value": translate_value(construction_age)
-
         })
+
 
     # BALCONY / TERRACE
 
@@ -396,16 +415,15 @@ def create_property_details(property_data):
     if balcony:
 
         details.append({
-
             "label": "Balcony/Terrace",
-
             "value": translate_value(balcony)
-
         })
+
 
     # Converts the Python list of dictionaries into a JSON string.
 
     return json.dumps(details, ensure_ascii=False)
+
 
 
 # Function to get image URLs from an individual property page.
@@ -423,15 +441,11 @@ def get_property_images(property_url):
     # Find the images array
 
     match = re.search(
-
         r'\\"images\\":(\[.*?\])',
-
         html
-
     )
 
     if not match:
-
         return None
 
     # Extracts the array
@@ -461,15 +475,21 @@ def get_property_images(property_url):
     return image_urls
 
 
+
 def get_admin_price(property_url):
+
     # Request the property page
+
     response = requests.get(property_url)
+
     response.raise_for_status()
+
     html = response.text
 
     # Find the administration price
+
     match = re.search(
-        r'Administración:\s*\$\s*([\d\.]+)\s*COP',  #s*-> whitespace/tabs
+        r'Administración:\s*\$\\?\s*([\d\.]+)\s*COP',
         html
     )
 
@@ -477,13 +497,18 @@ def get_admin_price(property_url):
         return None
 
     # Extract the price
+
     admin_price = match.group(1)
 
     # Remove dots from the Colombian number format
+
     admin_price = admin_price.replace(".", "")
 
     # Convert to integer
+
     return int(admin_price)
+
+
 
 # MAIN FUNCTION
 
@@ -492,13 +517,9 @@ def main():
     logging.info("Sending request to Metrocuadrado API")
 
     response = requests.get(
-
         API_URL,
-
         params=params,
-
         headers=headers
-
     )
 
     response.raise_for_status()
@@ -514,20 +535,15 @@ def main():
     logging.info("API request successful")
 
     logging.info(
-
         "Results received: %s",
-
         len(data.get("results", []))
-
     )
 
     logging.info(
-
         "Total hits: %s",
-
         data.get("totalHits")
-
     )
+
 
     # GET PROPERTIES
 
@@ -540,12 +556,12 @@ def main():
     for id, property_data in enumerate(properties[:10], start=1):
 
         print(
-
             "\nProcessing property:",
-
             property_data.get("midinmueble")
-
         )
+
+        # print("LOCALIZACION:", property_data.get("localizacion"))
+
 
         # PROPERTY URL
 
@@ -554,11 +570,8 @@ def main():
         if property_link:
 
             property_url = (
-
                 "https://www.metrocuadrado.com"
-
                 + property_link
-
             )
 
         else:
@@ -576,10 +589,15 @@ def main():
 
             images = None
 
+
         # GET ADMIN PRICE
+
         if property_url:
+
             admin_price = get_admin_price(property_url)
+
         else:
+
             admin_price = None
 
 
@@ -596,69 +614,49 @@ def main():
             "link": property_url,
 
             "location": (
-
                 f"{property_data.get('mbarrio')}, "
-
                 f"{property_data.get('mciudad', {}).get('nombre')}"
-
             ),
 
             "country": "Colombia",
 
             "lat": property_data.get(
-
                 "localizacion", {}
-
             ).get("lat"),
 
             "lng": property_data.get(
-
                 "localizacion", {}
-
             ).get("lon"),
 
             "latLng_status": (
-
                 1
-
                 if (
-
                     property_data.get(
-
                         "localizacion", {}
-
                     ).get("lat") is not None
 
                     and
 
                     property_data.get(
-
                         "localizacion", {}
-
                     ).get("lon") is not None
-
                 )
 
                 else 0
-
             ),
 
             "type": property_data.get("mtiponegocio"),
 
             "phone": property_data.get("contactPhone"),
 
-            #1cop=0.00029869 usd 
+            #1cop=0.00029869 usd
 
             # 1 COP = 0.00029869 USD
 
             "price": (
-
                 property_data.get("mvalorventa") * 0.00029869
-
                 if property_data.get("mvalorventa") is not None
-
                 else None
-
             ),
 
             "price_unit": None,
@@ -680,13 +678,9 @@ def main():
             "full_baths": property_data.get("mnrobanos"),
 
             "property_type": (
-
                 property_data.get(
-
                     "mtipoinmueble", {}
-
                 ).get("nombre")
-
             ),
 
             "interior_sq_ft": (
@@ -696,9 +690,7 @@ def main():
             ),
 
             "amneties": translate_featured(
-
                 property_data.get("featured") or []
-
             ),
 
             "features": None,
@@ -716,29 +708,21 @@ def main():
             "updated_at": None,
 
             "city": (
-
                 property_data.get(
-
                     "mciudad", {}
-
                 ).get("nombre")
-
             ),
 
             "new_features": None,
 
             "property_details": create_property_details(
-
                 property_data
-
             ),
 
             "exterior_details": None, #Zonas comunes y Exteriores(common areas and outdoor spaces )
 
             "interior_details": translate_featured(
-
                 property_data.get("featured") or []
-
             ),
 
             "city_checked": None,
@@ -746,15 +730,11 @@ def main():
             "province": None,
 
             "property_status": property_data.get(
-
                 "mestadoinmueble"
-
             ),
 
             "neighbourhood": property_data.get(
-
                 "mbarrio"
-
             ),
 
             "commercial_units": None,
@@ -766,145 +746,180 @@ def main():
             "last_seen_at": None,
 
             "missing_count": None,
-# https://www.metrocuadrado.com/inmueble/venta-apartamento-medellin-san-julian-2-habitaciones-2-banos-2-garajes/22583-M6862009?src_url=%2Fapartamento%2Fventa%2Fmedellin%2F%3Fsearch%3Dform
+
+
+            # https://www.metrocuadrado.com/inmueble/venta-apartamento-medellin-san-julian-2-habitaciones-2-banos-2-garajes/22583-M6862009?src_url=%2Fapartamento%2Fventa%2Fmedellin%2F%3Fsearch%3Dform
+
             "admin_price": admin_price,
 
         }
 
+
         # Converts latitude and longitude to strings
 
         row["lat"] = (
-
             str(row["lat"])
-
             if row["lat"] is not None
-
             else None
-
         )
 
         row["lng"] = (
-
             str(row["lng"])
-
             if row["lng"] is not None
-
             else None
-
         )
+
 
         # Convert bedrooms and full_baths to strings
 
         row["bedrooms"] = (
-
             str(row["bedrooms"])
-
             if row["bedrooms"] is not None
-
             else None
-
         )
 
         row["full_baths"] = (
-
             str(row["full_baths"])
-
             if row["full_baths"] is not None
-
             else None
-
         )
+
 
         # Convert multiple-value fields into JSON-formatted strings
 
         for column in [
-
             "img_src",
-
             "amneties",
-
             "exterior_details",
-
             "interior_details"
-
         ]:
 
             row[column] = (
-
                 json.dumps(
-
                     row[column],
-
                     ensure_ascii=False
-
                 )
-
                 if row[column] is not None
-
                 else None
-
             )
+
 
         # Convert date fields to strings if they contain a value
 
         for column in [
-
             "change_price",
-
             "sold_date",
-
             "deleted_at",
-
             "created_at",
-
             "updated_at",
-
             "first_seen_at",
-
             "last_seen_at"
-
         ]:
 
             row[column] = (
-
                 str(row[column])
-
                 if row[column] is not None
-
                 else None
-
             )
+
 
         # ADD ROW TO LIST
 
         rows.append(row)
 
         logging.info(
-
             "Property processed: %s",
-
             row["web_id"]
-
         )
+
 
     # CREATE DATAFRAME
 
     df = pd.DataFrame(rows)
 
+
+    # TRANSLATE SPANISH COLUMNS TO ENGLISH
+
+    # translate_columns = [
+    #     "title",
+    #     "type",
+    #     "details",
+    #     "property_type",
+    #     "property_status",
+    # ]
+
+    # for column in translate_columns:
+
+    #     # Get unique non-empty values
+
+    #     values = (
+    #         df[column]
+    #         .dropna()
+    #         .astype(str)
+    #         .unique()
+    #         .tolist()
+    #     )
+
+    #     if not values:
+    #         continue
+
+    #     try:
+
+    #         # # Translate values using DeepL
+
+    #         # translated_values = translator.translate_text(
+    #         #     values,
+    #         #     source_lang="ES",
+    #         #     target_lang="EN-US"
+    #         # )
+
+    #         # Get translated text from DeepL results
+
+    #         translated_texts = [
+    #             result.text
+    #             for result in translated_values
+    #         ]
+
+    #         # Create Spanish -> English mapping
+
+    #         translation_map = dict(
+    #             zip(values, translated_texts)
+    #         )
+
+    #         # Replace original values with translations
+
+    #         df[column] = df[column].map(
+    #             lambda x: translation_map.get(
+    #                 str(x),
+    #                 x
+    #             )
+    #             if pd.notna(x)
+    #             else x
+    #         )
+
+    #         print(f"Translated column: {column}")
+
+    #     except Exception as e:
+
+    #         print(
+    #             f"Translation failed for column {column}: {e}"
+    #         )
+
+    #         logging.error(
+    #             "Translation failed for column %s: %s",
+    #             column,
+    #             e
+    #         )
+
+
     # TRANSLATE SPANISH COLUMNS TO ENGLISH
 
     translate_columns = [
-
         "title",
-
         "type",
-
         "details",
-
         "property_type",
-
         "property_status",
-
     ]
 
     for column in translate_columns:
@@ -912,71 +927,36 @@ def main():
         # Get unique non-empty values
 
         values = (
-
             df[column]
-
             .dropna()
-
             .astype(str)
-
             .unique()
-
             .tolist()
-
         )
 
         if not values:
-
             continue
 
         try:
 
-            # Translate values using DeepL
+            # Translate each unique value using Helsinki-NLP
 
-            translated_values = translator.translate_text(
+            translation_map = {}
 
-                values,
+            for value in values:
 
-                source_lang="ES",
+                translation_map[value] = translate_value(value)
 
-                target_lang="EN-US"
 
-            )
-
-            # Get translated text from DeepL results
-
-            translated_texts = [
-
-                result.text
-
-                for result in translated_values
-
-            ]
-
-            # Create Spanish -> English mapping
-
-            translation_map = dict(
-
-                zip(values, translated_texts)
-
-            )
-
-            # Replace original values with translations
+            # Replace Spanish values with English translations
 
             df[column] = df[column].map(
-
                 lambda x: translation_map.get(
-
                     str(x),
-
                     x
-
                 )
-
                 if pd.notna(x)
-
                 else x
-
             )
 
             print(f"Translated column: {column}")
@@ -984,36 +964,28 @@ def main():
         except Exception as e:
 
             print(
-
                 f"Translation failed for column {column}: {e}"
-
             )
 
             logging.error(
-
                 "Translation failed for column %s: %s",
-
                 column,
-
                 e
-
             )
+
 
     # SAVE DATAFRAME TO CSV
 
     df.to_csv(
-
-        "metrocuadrado_properties.csv",
-
+        "metrocuadrado_properties_heln.csv",
         index=False
-
     )
 
     print("\nCSV saved successfully.")
 
 
+
 # RUN MAIN FUNCTION
 
 if __name__ == "__main__":
-
     main()

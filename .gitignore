@@ -13,3 +13,5 @@ details_all.py
 image_test.py
 details_translationgadbad.py
 translation_test.py
+details_deepL_translator.py
+helsinki.py
