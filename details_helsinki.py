@@ -9,6 +9,7 @@ import re
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 from dotenv import load_dotenv
 
+
 load_dotenv()
 
 API_KEY = os.getenv("API_KEY")
@@ -365,56 +366,72 @@ def create_property_details(property_data):
     return json.dumps(details, ensure_ascii=False)
 
 
-
 # Function to get image URLs from an individual property page.
 
-def get_property_images(property_url):
+# def get_property_images(property_url):
 
-    # Request the property page
+#     # Request the property page
 
-    response = requests.get(property_url)
+#     response = requests.get(property_url)
 
-    response.raise_for_status()
+#     response.raise_for_status()
 
-    html = response.text
+#     html = response.text
 
-    # Find the images array
+#     # Find the images array
 
-    match = re.search(
-        r'\\"images\\":(\[.*?\])',
-        html
-    )
+#     match = re.search(
+#         r'\\"images\\":(\[.*?\])',
+#         html
+#     )
 
-    if not match:
-        return None
+#     if not match:
+#         return None
 
-    # Extracts the array
+#     # Extracts the array
 
-    images_json = match.group(1)
+#     images_json = match.group(1)
 
-    # Convert escaped JSON into normal JSON
+#     # Convert escaped JSON into normal JSON
 
-    images_json = images_json.replace('\\"', '"')
+#     images_json = images_json.replace('\\"', '"')
 
-    # Convert JSON string to Python list of dictionaries
+#     # Convert JSON string to Python list of dictionaries
 
-    images = json.loads(images_json)
+#     images = json.loads(images_json)
 
-    # Extract image URLs
+#     # Extract image URLs
 
-    image_urls = []
+#     image_urls = []
 
-    for image in images:
+#     for image in images:
 
-        image_url = image.get("image")
+#         image_url = image.get("image")
 
-        if image_url:
+#         if image_url:
 
-            image_urls.append(image_url)
+#             image_urls.append(image_url)
 
-    return image_urls
+#     return image_urls
 
+#concating from api 
+def get_property_images(property_data):
 
+    id = property_data.get("midinmueble")
+    image_ids = property_data.get("mgaleriainmueble") or []
+
+    image_url = []
+    base_url = "https://multimedia.metrocuadrado.com/"
+
+    for image in image_ids:
+        url = base_url + id + "/" + image + ".jpg"
+        image_url.append(url)
+
+    print(image_ids)
+    print(id)
+    print(image_url)
+
+    return image_url
 
 def get_admin_price(property_url):
 
@@ -483,8 +500,9 @@ def get_cop_usd_rate():
     cop_usd_rate = 1 / usd_cop_rate
 
     return cop_usd_rate
-# MAIN FUNCTION
 
+
+# MAIN FUNCTION
 def main():
 
     logging.info("Sending request to Metrocuadrado API")
@@ -557,7 +575,7 @@ def main():
 
         if property_url:
 
-            images = get_property_images(property_url)
+            images = get_property_images(property_data)
 
         else:
 
@@ -717,7 +735,7 @@ def main():
 
             "last_seen_at": None,
 
-            "missing_count": None,
+            "missing_count": 0,
 
 
             # https://www.metrocuadrado.com/inmueble/venta-apartamento-medellin-san-julian-2-habitaciones-2-banos-2-garajes/22583-M6862009?src_url=%2Fapartamento%2Fventa%2Fmedellin%2F%3Fsearch%3Dform
