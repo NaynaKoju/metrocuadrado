@@ -73,7 +73,7 @@ def insert_properties():
         )
     """
 
-    for _, row in df.iterrows():
+    for _, row in df.iterrows():  #_ -> index ra row aucha, index chaidaina so row matra lina lai
 
         # Convert pandas NaN values to None
         values = (
@@ -124,7 +124,7 @@ def insert_properties():
             row["admin_price"]
         )
 
-        # Replace NaN with None
+        # Replace NaN with None/ mysql expects values in tuple
         values = tuple(
             None if pd.isna(value) else value
             for value in values

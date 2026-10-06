@@ -56,6 +56,7 @@ model = AutoModelForSeq2SeqLM.from_pretrained(MODEL_NAME)
 
 translation_cache = {}
 
+
 # Function to translate a single value from Spanish to English
 
 def translate_value(value):
@@ -183,7 +184,10 @@ def create_property_details(property_data):
 
     for item in featured:
 
-        item = item.strip()
+        if not item:
+            continue
+
+        item = str(item).strip()
 
         if ":" in item:
 
@@ -198,8 +202,12 @@ def create_property_details(property_data):
 
     # PROPERTY TYPE
 
-    property_type = (
-        property_data.get("mtipoinmueble", {}).get("nombre")
+    mtipoinmueble = property_data.get(
+        "mtipoinmueble"
+    ) or {}
+
+    property_type = mtipoinmueble.get(
+        "nombre"
     )
 
     if property_type:
@@ -269,10 +277,16 @@ def create_property_details(property_data):
 
     if private_area:
 
-        details.append({
-            "label": "Private Area",
-            "value": f"{private_area * 10.7639:.2f} sq ft"
-        })
+        try:
+
+            details.append({
+                "label": "Private Area",
+                "value": f"{float(private_area) * 10.7639:.2f} sq ft"
+            })
+
+        except (ValueError, TypeError):
+
+            pass
 
 
     # AREA
@@ -281,10 +295,16 @@ def create_property_details(property_data):
 
     if area:
 
-        details.append({
-            "label": "Area",
-            "value": f"{area * 10.7639:.2f} sq ft"
-        })
+        try:
+
+            details.append({
+                "label": "Area",
+                "value": f"{float(area) * 10.7639:.2f} sq ft"
+            })
+
+        except (ValueError, TypeError):
+
+            pass
 
 
     # SOCIOECONOMIC STRATUM
@@ -414,24 +434,45 @@ def create_property_details(property_data):
 
 #     return image_urls
 
-#concating from api 
+
+# concating from api
+
 def get_property_images(property_data):
 
-    id = property_data.get("midinmueble")
-    image_ids = property_data.get("mgaleriainmueble") or []
+    property_id = property_data.get("midinmueble")
+
+    image_ids = property_data.get(
+        "mgaleriainmueble"
+    ) or []
 
     image_url = []
+
     base_url = "https://multimedia.metrocuadrado.com/"
 
+    if not property_id:
+        return image_url
+
     for image in image_ids:
-        url = base_url + id + "/" + image + ".jpg"
+
+        if not image:
+            continue
+
+        url = (
+            base_url
+            + str(property_id)
+            + "/"
+            + str(image)
+            + ".jpg"
+        )
+
         image_url.append(url)
 
     # print(image_ids)
-    # print(id)
+    # print(property_id)
     # print(image_url)
 
     return image_url
+
 
 # def get_admin_price(property_url):
 
@@ -464,6 +505,7 @@ def get_property_images(property_data):
 #     # Convert to integer
 
 #     return int(admin_price)
+
 
 # def get_admin_price(property_url):
 
@@ -503,7 +545,9 @@ def get_property_images(property_data):
 
 #         return None
 
+
 # Function to get the current USD to COP exchange rate
+
 def get_cop_usd_rate():
 
     response = requests.get(
@@ -541,60 +585,37 @@ def get_cop_usd_rate():
 
 
 # MAIN FUNCTION
+
 def main():
-
-    logging.info("Sending request to Metrocuadrado API")
-
-    response = requests.get(
-        API_URL,
-        params=params,
-        headers=headers
-    )
-
-    response.raise_for_status()
-
-    data = response.json()
-
-    print("Status:", response.status_code)
-
-    print("Results:", len(data.get("results", [])))
-
-    print("Total hits:", data.get("totalHits"))
-
-    logging.info("API request successful")
-
-    logging.info(
-        "Results received: %s",
-        len(data.get("results", []))
-    )
-
-    logging.info(
-        "Total hits: %s",
-        data.get("totalHits")
-    )
 
     # Get current COP to USD exchange rate
     cop_usd_rate = get_cop_usd_rate()
 
-    logging.info("Sending request to Metrocuadrado API")
+    rows = []
+
+    # Pagination starting point
+    from_value = 0
+
+    # Count total properties scraped
+    total_scraped = 0
+
 
     # GET PROPERTIES
 
-    properties = data.get("results", [])
-
-    # print (data)
-
-    rows = []
-
-    from_value = 0  #for pagination, starting point for the API request
     while True:
 
         params["from"] = from_value
 
+        logging.info(
+            "Sending request to Metrocuadrado API. Offset: %s",
+            from_value
+        )
+
         response = requests.get(
             API_URL,
             params=params,
-            headers=headers
+            headers=headers,
+            timeout=30
         )
 
         response.raise_for_status()
@@ -603,8 +624,11 @@ def main():
 
         properties = data.get("results", [])
 
+        # Stop if API returns no properties
+
         if not properties:
             break
+
 
         print(
             f"\nOffset {from_value}: "
@@ -616,14 +640,40 @@ def main():
             data.get("totalHits")
         )
 
-        # for id, property_data in enumerate(properties[:500], start=1):
+
+        logging.info(
+            "Offset %s: %s properties",
+            from_value,
+            len(properties)
+        )
+
+        logging.info(
+            "Total hits: %s",
+            data.get("totalHits")
+        )
+
+
+        # PROCESS EACH PROPERTY
+
         for property_data in properties:
-            print(
-                "\nProcessing property:",
-                property_data.get("midinmueble")
+
+            # Safely get nested dictionaries
+
+            localizacion = (
+                property_data.get("localizacion")
+                or {}
             )
 
-            localizacion = property_data.get("localizacion") or {}
+            mciudad = (
+                property_data.get("mciudad")
+                or {}
+            )
+
+            mtipoinmueble = (
+                property_data.get("mtipoinmueble")
+                or {}
+            )
+
 
             # PROPERTY URL
 
@@ -631,10 +681,16 @@ def main():
 
             if property_link:
 
-                property_url = (
-                    "https://www.metrocuadrado.com"
-                    + property_link
-                )
+                if property_link.startswith("http"):
+
+                    property_url = property_link
+
+                else:
+
+                    property_url = (
+                        "https://www.metrocuadrado.com"
+                        + property_link
+                    )
 
             else:
 
@@ -643,35 +699,32 @@ def main():
 
             # GET IMAGE URLS
 
-            if property_url:
-
-                images = get_property_images(property_data)
-
-            else:
-
-                images = None
+            images = get_property_images(
+                property_data
+            )
 
 
             # GET ADMIN PRICE
 
             # if property_url:
 
-                # admin_price = get_admin_price(property_url)
+            #     admin_price = get_admin_price(property_url)
 
             # else:
 
             #     admin_price = None
 
-            admin_price= None
+            admin_price = None
 
 
             # CREATE ROW
 
             row = {
 
-                "id": id,
+                # Database ID is AUTO_INCREMENT
+                "id": None,
 
-                "uuid": str(uuid.uuid4()),   #generates universally unique id(idk needed or not)
+                "uuid": str(uuid.uuid4()),
 
                 "title": property_data.get("title"),
 
@@ -679,7 +732,7 @@ def main():
 
                 "location": (
                     f"{property_data.get('mbarrio')}, "
-                    f"{property_data.get('mciudad', {}).get('nombre')}"
+                    f"{mciudad.get('nombre')}"
                 ),
 
                 "country": "Colombia",
@@ -716,24 +769,38 @@ def main():
                     1
                     if (
                         localizacion.get("lat") is not None
-                        and localizacion.get("lon") is not None
+                        and
+                        localizacion.get("lon") is not None
                     )
                     else 0
                 ),
 
-                "type": property_data.get("mtiponegocio"),
+                "type": property_data.get(
+                    "mtiponegocio"
+                ),
 
-                "phone": property_data.get("contactPhone"),
+                "phone": property_data.get(
+                    "contactPhone"
+                ),
 
                 "price": (
-                    round(property_data.get("mvalorventa") * cop_usd_rate, 3)
-                    if property_data.get("mvalorventa") is not None
+                    round(
+                        property_data.get(
+                            "mvalorventa"
+                        ) * cop_usd_rate,
+                        3
+                    )
+                    if property_data.get(
+                        "mvalorventa"
+                    ) is not None
                     else None
                 ),
 
                 "price_unit": None,
 
-                "details": property_data.get("comment"),
+                "details": property_data.get(
+                    "comment"
+                ),
 
                 "img_src": images,
 
@@ -741,23 +808,33 @@ def main():
 
                 "exterior_acres": None,
 
-                "web_id": property_data.get("midinmueble"),
+                "web_id": property_data.get(
+                    "midinmueble"
+                ),
 
-                "mls_id": None,  #multiple listing service
+                "mls_id": None,
 
-                "bedrooms": property_data.get("mnrocuartos"),
+                "bedrooms": property_data.get(
+                    "mnrocuartos"
+                ),
 
-                "full_baths": property_data.get("mnrobanos"),
+                "full_baths": property_data.get(
+                    "mnrobanos"
+                ),
 
                 "property_type": (
-                    property_data.get(
-                        "mtipoinmueble", {}
-                    ).get("nombre")
+                    mtipoinmueble.get(
+                        "nombre"
+                    )
                 ),
 
                 "interior_sq_ft": (
-                    property_data.get("marea") * 10.7639
-                    if property_data.get("marea") is not None
+                    float(
+                        property_data.get("marea")
+                    ) * 10.7639
+                    if property_data.get(
+                        "marea"
+                    ) is not None
                     else None
                 ),
 
@@ -779,19 +856,19 @@ def main():
 
                 "updated_at": None,
 
-                "city": (
-                    property_data.get(
-                        "mciudad", {}
-                    ).get("nombre")
+                "city": mciudad.get(
+                    "nombre"
                 ),
 
                 "new_features": None,
 
-                "property_details": create_property_details(
-                    property_data
+                "property_details": (
+                    create_property_details(
+                        property_data
+                    )
                 ),
 
-                "exterior_details": None, #Zonas comunes y Exteriores(common areas and outdoor spaces )
+                "exterior_details": None,
 
                 # "interior_details": translate_featured(
                 #     property_data.get("featured") or []
@@ -820,9 +897,6 @@ def main():
                 "last_seen_at": None,
 
                 "missing_count": 0,
-
-
-                # https://www.metrocuadrado.com/inmueble/venta-apartamento-medellin-san-julian-2-habitaciones-2-banos-2-garajes/22583-M6862009?src_url=%2Fapartamento%2Fventa%2Fmedellin%2F%3Fsearch%3Dform
 
                 "admin_price": admin_price,
 
@@ -901,17 +975,66 @@ def main():
 
             rows.append(row)
 
+
+            # LOG PROPERTY
+
             logging.info(
                 "Property processed: %s",
                 row["web_id"]
             )
-        from_value += 50
-        print("Moving to next offset:", from_value)
+
+
+            # Increase total scraped count
+
+            total_scraped += 1
+
+            print(
+                f"Scraped: {total_scraped}/500",
+                end="\r"
+            )
+
+
+            # STOP AFTER 500 PROPERTIES
+
+            if total_scraped >= 500:
+
+                break
+
+
+        print()
+
+
+        # STOP THE WHILE LOOP
+
+        if total_scraped >= 500:
+
+            print(
+                "Reached 500 properties. "
+                "Stopping scraper."
+            )
+
+            break
+
+
+        # MOVE TO NEXT OFFSET
+
+        from_value += len(properties)
+
+        print(
+            "Moving to next offset:",
+            from_value
+        )
 
 
     # CREATE DATAFRAME
 
     df = pd.DataFrame(rows)
+
+    print(
+        f"\nTotal properties collected: "
+        f"{len(df)}"
+    )
+
 
     # TRANSLATE SPANISH COLUMNS TO ENGLISH
 
@@ -922,6 +1045,7 @@ def main():
         "property_type",
         "property_status",
     ]
+
 
     for column in translate_columns:
 
@@ -946,13 +1070,16 @@ def main():
 
             for value in values:
 
-                translation_map[value] = translate_value(value)
+                translation_map[value] = (
+                    translate_value(value)
+                )
 
 
             # Replace Spanish values with English translations
 
             df[column] = df[column].map(
-                lambda x: translation_map.get(
+                lambda x:
+                translation_map.get(
                     str(x),
                     x
                 )
@@ -960,12 +1087,15 @@ def main():
                 else x
             )
 
-            print(f"Translated column: {column}")
+            print(
+                f"Translated column: {column}"
+            )
 
         except Exception as e:
 
             print(
-                f"Translation failed for column {column}: {e}"
+                f"Translation failed for column "
+                f"{column}: {e}"
             )
 
             logging.error(
@@ -977,16 +1107,24 @@ def main():
 
     # SAVE DATAFRAME TO CSV
 
-    df.to_csv(
-        "./csv_files/metrocuadrado_properties.csv",
-        index=False
+    os.makedirs(
+        "./csv_files",
+        exist_ok=True
     )
 
-    print("\nCSV saved successfully.")
+    df.to_csv(
+        "./csv_files/metrocuadrado_properties.csv",
+        index=False,
+        encoding="utf-8-sig"
+    )
 
+    print(
+        "\nCSV saved successfully."
+    )
 
 
 # RUN MAIN FUNCTION
 
 if __name__ == "__main__":
+
     main()
